@@ -35,9 +35,9 @@ contact_person = st.text_input("Contact Person")
 email_id = st.text_input("Email ID")
 contact_details = st.text_input("Phone No.")
 
-# Remarks
-st.header("📝 Remarks")
-remarks = st.text_area("Any Remarks")
+# # Remarks
+# st.header("📝 Remarks")
+# remarks = st.text_area("Any Remarks")
 
 # Save in session
 if st.button("Save & Continue"):
@@ -57,6 +57,6 @@ if st.button("Save & Continue"):
         "contact_person": contact_person,
         "email_id": email_id,
         "contact_details": contact_details,
-        "remarks": remarks,
+        # "remarks": remarks,
     }
     st.success("✅ Details saved. Please go to the next page: *Product Selection*")
