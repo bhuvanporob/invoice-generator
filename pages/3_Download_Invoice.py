@@ -5,8 +5,17 @@ from openpyxl.worksheet.pagebreak import Break
 from io import BytesIO
 from num2words import num2words
 import pandas as pd
-from openpyxl.styles import Font, Border, Side
+from openpyxl.styles import Font, Border, Side,Alignment
 
+
+if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
+    st.warning("🚫 You must log in to view this page.")
+    st.stop()
+
+
+st.write(f"Hello, {st.session_state['username']}! You have access to this secure page.")
+
+# Styles
 bold_font = Font(name="Arial", bold=True)
 italic_font = Font(name="Calibri", italic=True)
 thin_border = Border(
@@ -15,16 +24,11 @@ thin_border = Border(
     top=Side(style='thin'),
     bottom=Side(style='thin')
 )
-thin_border_lower = Border(
-    left=Side(style='thin'),
-    right=Side(style='thin'),
-    bottom=Side(style='thin')
-)
 
-
+# UI title
 st.title("Step 3: Generate & Download Invoice")
 
-# Check previous steps
+# Safety checks
 if "invoice_data" not in st.session_state or "products" not in st.session_state or len(st.session_state.products) == 0:
     st.warning("Please complete Step 1 and Step 2 before generating the invoice.")
     st.stop()
@@ -32,20 +36,17 @@ if "invoice_data" not in st.session_state or "products" not in st.session_state 
 products = st.session_state.products
 invoice = st.session_state.invoice_data
 
-# --- Subtotal Calculation ---
+# Totals and Adjustments
 subtotal = sum(p["amount"] for p in products)
-
-# --- User Inputs for Final Adjustments ---
 st.header("Final Adjustments")
 
 freight = st.number_input("Freight Charges", value=0.0, step=0.1)
 round_off = round(subtotal, 0)
 discount = st.number_input("Discount on Sales", value=0.0, step=0.1)
-
-final_total = round(freight + round_off - discount,0)
+final_total = round(freight + round_off - discount, 0)
 amount_words = num2words(final_total, to='cardinal', lang='en_IN').upper() + " ONLY"
 
-# --- Product Preview ---
+# Preview
 st.subheader("Product List Preview")
 df = pd.DataFrame(products)
 df.index = range(1, len(df) + 1)
@@ -54,12 +55,12 @@ st.dataframe(df[["product_name", "product_code", "hsn", "uom", "qty", "rate", "a
     "amount": "₹{:.2f}"
 }))
 
-# --- Generate Excel ---
+# Generate
 if st.button("Generate Invoice"):
     wb = load_workbook("sample invoice.xlsx")
     ws = wb.active
 
-    # --- Replace Header Placeholders ---
+    # Header replacements
     replacements = {
         "{invoice number}": invoice["invoice_number"],
         "{date}": invoice["invoice_date"].strftime("%d-%m-%Y"),
@@ -76,8 +77,23 @@ if st.button("Generate Invoice"):
         "{Contact person}": invoice["contact_person"],
         "{emailid}": invoice["email_id"],
         "{Contact details}": invoice["contact_details"],
-        # "{remarks}": invoice["remarks"]
+        "{remarks}": invoice["remarks"],
     }
+    # Custom Merging for Addresses and Remarks
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str):
+                if "{Address}" in cell.value:
+                    start_row = cell.row
+                    start_col = cell.column
+                    ws.merge_cells(start_row=start_row, start_column=start_col, end_row=start_row + 4, end_column=start_col)
+
+                elif "{Consingee Address}" in cell.value:
+                    start_row = cell.row
+                    start_col = cell.column
+                    ws.merge_cells(start_row=start_row, start_column=start_col, end_row=start_row + 4, end_column=start_col)
+
+
 
     for row in ws.iter_rows():
         for cell in row:
@@ -86,97 +102,59 @@ if st.button("Generate Invoice"):
                     if key in cell.value:
                         cell.value = cell.value.replace(key, str(value))
 
-    # --- Insert Products ---
-    start_row = None
-    for row in ws.iter_rows():
-        for cell in row:
-            if isinstance(cell.value, str) and "{product 1}" in cell.value:
-                start_row = cell.row
-                break
-        if start_row:
-            break
+    # Wrap text for Buyer Address (update cell ref as per your template)
+    ws["F5"].alignment = Alignment(vertical='top',wrap_text=True)
 
-    if not start_row:
-        st.error("Template does not contain product placeholder `{product 1}`.")
-        st.stop()
+    # Wrap text for Consignee Address
+    ws["F13"].alignment = Alignment(vertical='top',wrap_text=True)
+
+
+    # Insert products
+    start_row = 25
+    row_pointer = start_row
 
     for idx, product in enumerate(products):
-        sr = idx + 1
-        row_num = start_row + idx * 2
+        ws.insert_rows(row_pointer)
+        ws.insert_rows(row_pointer)
 
-        # Insert two new rows for each product
-        ws.insert_rows(row_num)
-        ws.insert_rows(row_num + 1)
+        # Main row
+        ws.cell(row=row_pointer, column=2, value=idx + 1).font = bold_font
+        ws.cell(row=row_pointer, column=2).alignment = Alignment(vertical='center', horizontal='center')
+        name_cell = ws.cell(row=row_pointer, column=3, value=product["product_name"])
+        name_cell.font = bold_font
+        name_cell.alignment = Alignment(vertical='top', wrap_text=True)
+        ws.cell(row=row_pointer, column=4, value=product["uom"]).font = bold_font
+        ws.cell(row=row_pointer, column=4).alignment = Alignment(vertical='center', horizontal='center')
+        ws.cell(row=row_pointer, column=5, value=product["qty"]).font = bold_font
+        ws.cell(row=row_pointer, column=5).alignment = Alignment(vertical='center', horizontal='center')
+        ws.cell(row=row_pointer, column=6, value=product["rate"]).font = bold_font
+        ws.cell(row=row_pointer, column=6).alignment = Alignment(vertical='center', horizontal='center')
+        ws.cell(row=row_pointer, column=7, value=product["amount"]).font = bold_font
+        ws.cell(row=row_pointer, column=7).alignment = Alignment(vertical='center', horizontal='center')
 
-        # Row 1: Sr. No, UOM, QTY, Rate, Amount — Bold + Border
-        for col, val in zip([2, 4, 5, 6, 7], [sr, product["uom"], product["qty"], product["rate"], product["amount"]]):
-            cell = ws.cell(row=row_num, column=col, value=val)
-            cell.font = bold_font
-            cell.border = thin_border
+        # Second row: product code and HSN
+        desc = f"Product Code: {product['product_code']}   HSN Code: {product['hsn']}"
+        if desc.strip() == "Product Code:    HSN Code:":
+            desc = " "
 
-        # Row 2: Product Code & HSN — Italics + Border
-        desc = f'Product Code: {product["product_code"]}   HSN Code: {product["hsn"]}'
-        desc_cell = ws.cell(row=row_num + 1, column=3, value=desc)
+        desc_cell = ws.cell(row=row_pointer + 1, column=3, value=desc)
         desc_cell.font = italic_font
         desc_cell.border = thin_border
+        desc_cell.alignment = Alignment(vertical='top', wrap_text=True)
 
-        # Also apply border to the rest of the merged columns in row_num + 1
+        # Apply border and merge for all columns except col 3
         for col in [2, 4, 5, 6, 7]:
-            cell = ws.cell(row=row_num + 1, column=col)
-            cell.border = thin_border_lower
+            ws.merge_cells(start_row=row_pointer, start_column=col, end_row=row_pointer+1, end_column=col)
+            for r in [row_pointer, row_pointer + 1]:
+                ws.cell(row=r, column=col).border = thin_border
+                ws.cell(row=r, column=col).alignment = Alignment(vertical='center', horizontal='center')
 
-        # Product name in Row 1, Column 3 (Product Description)
-        name_cell = ws.cell(row=row_num, column=3, value=product["product_name"])
-        # name_cell.font = Font(name="Arial",bold=True)  # Bold
-        # name_cell.border = thin_border
+        # Merge column 3 (description) ONLY for the top row, NOT across
+        ws.cell(row=row_pointer, column=3).border = thin_border
 
-        # Description in Row 2, Column 3
-        desc = f'Product Code: {product["product_code"]}   HSN Code: {product["hsn"]}'
-        desc_cell = ws.cell(row=row_num + 1, column=3, value=desc)
-        # desc_cell.font = Font(name="Calibri", italic=True)  # Italic and border
-        # desc_cell.border = thin_border
+        row_pointer += 2
 
-        # Merge Sr. No, UOM, QTY, Rate, Amount across the two rows
-        for col in [2, 4, 5, 6, 7]:  # Adjusted to match correct column indexes (B-G)
-            ws.merge_cells(start_row=row_num, start_column=col, end_row=row_num + 1, end_column=col)
-
-        # Fill merged values in top row (columns B-G = 2-7)
-        # Sr. No
-        cell = ws.cell(row=row_num, column=2, value=sr)
-        # cell.font = bold_font
-        # cell.border = thin_border
-
-        # UOM
-        cell = ws.cell(row=row_num, column=4, value=product["uom"])
-        # cell.font = bold_font
-        # cell.border = thin_border
-
-        # QTY
-        cell = ws.cell(row=row_num, column=5, value=product["qty"])
-        # cell.font = bold_font
-        # cell.border = thin_border
-
-        # Rate
-        cell = ws.cell(row=row_num, column=6, value=product["rate"])
-        # cell.font = bold_font
-        # cell.border = thin_border
-
-        # Amount
-        cell = ws.cell(row=row_num, column=7, value=product["amount"])
-        # cell.font = bold_font
-        # cell.border = thin_border
-
-    # Remove the original placeholder row
-    ws.delete_rows(start_row + len(products) * 2)
-
-    # --- Adjust Page Break Based on Product Count ---
-    base_page_break = 40
-    product_rows = len(products) * 2
-    new_page_break = base_page_break + product_rows
-
-    ws.row_breaks.append(Break(id=new_page_break))
-
-    # --- Replace Summary Fields ---
+    # Totals
     for row in ws.iter_rows():
         for cell in row:
             if cell.value and isinstance(cell.value, str):
@@ -192,13 +170,52 @@ if st.button("Generate Invoice"):
                 elif "TOTAL AMOUNT" in label:
                     ws.cell(row=cell.row, column=cell.column + 1, value=final_total)
 
+
+    # remarks
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and "Remarks:" in cell.value:
+                start_row = cell.row
+                start_col = cell.column + 1
+                ws.merge_cells(
+                    start_row=start_row,
+                    start_column=start_col,
+                    end_row=start_row + 2,
+                    end_column=start_col + 2
+                )
+                merged_cell = ws.cell(row=start_row, column=start_col)
+                merged_cell.alignment = Alignment(vertical='top', horizontal='left', wrap_text=True)
+
+
     # Replace {Amount in words}
     for row in ws.iter_rows():
         for cell in row:
             if isinstance(cell.value, str) and "{Amount in words}" in cell.value:
                 cell.value = cell.value.replace("{Amount in words}", amount_words)
+                # Merge 2 cells to the left and 1 below
+                start_row = cell.row
+                start_col = cell.column 
+                end_row = cell.row + 1
+                end_col = cell.column + 2
+                ws.merge_cells(start_row=start_row, start_column=start_col, end_row=end_row, end_column=end_col)
+                merged_cell = ws.cell(row=start_row, column=start_col)
+                merged_cell.alignment = Alignment(vertical='top', horizontal='left', wrap_text=True)
 
-    # --- Export Excel ---
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and "Bank Details" in cell.value:
+                bank_row = cell.row
+                bank_col = cell.column + 1  # cell to the right
+                ws.merge_cells(
+                    start_row=bank_row,
+                    start_column=bank_col,
+                    end_row=bank_row + 4,
+                    end_column=bank_col
+                )
+                merged_cell = ws.cell(row=bank_row, column=bank_col)
+                merged_cell.alignment = Alignment(vertical='top', horizontal='left', wrap_text=True)
+
+    # Save and Download
     output = BytesIO()
     wb.save(output)
     output.seek(0)

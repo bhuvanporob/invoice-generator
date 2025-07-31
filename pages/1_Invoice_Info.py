@@ -1,6 +1,16 @@
 import streamlit as st
 import datetime
 
+import streamlit as st
+
+if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
+    st.warning("🚫 You must log in to view this page.")
+    st.stop()
+
+
+st.write(f"Hello, {st.session_state['username']}! You have access to this secure page.")
+
+
 st.title("📌 Step 1: Enter Invoice & Buyer Info")
 
 st.markdown("Please fill in all required details for the invoice.")
@@ -35,9 +45,9 @@ contact_person = st.text_input("Contact Person")
 email_id = st.text_input("Email ID")
 contact_details = st.text_input("Phone No.")
 
-# # Remarks
-# st.header("📝 Remarks")
-# remarks = st.text_area("Any Remarks")
+# Remarks
+st.header("📝 Remarks")
+remarks = st.text_area("Any Remarks")
 
 # Save in session
 if st.button("Save & Continue"):
@@ -57,6 +67,6 @@ if st.button("Save & Continue"):
         "contact_person": contact_person,
         "email_id": email_id,
         "contact_details": contact_details,
-        # "remarks": remarks,
+        "remarks": remarks,
     }
     st.success("✅ Details saved. Please go to the next page: *Product Selection*")

@@ -1,6 +1,13 @@
 import streamlit as st
 import pandas as pd
 
+if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
+    st.warning("🚫 You must log in to view this page.")
+    st.stop()
+
+
+st.write(f"Hello, {st.session_state['username']}! You have access to this secure page.")
+
 st.title("📦 Step 2: Select Products")
 
 # Load product list from file (do only once)
@@ -42,7 +49,7 @@ with st.form("add_product_form"):
     with col1:
         qty = st.number_input("Quantity", min_value=0.0, step=1.0)
     with col2:
-        st.markdown(f"**Rate:** ₹{rate:.2f}")
+        st.markdown(f"**Rate:** ${rate:.2f}")
 
     submitted = st.form_submit_button("✅ Add to Invoice")
 
@@ -66,6 +73,6 @@ if st.session_state.products:
     st.subheader("🧾 Products Added")
     df = pd.DataFrame(st.session_state.products)
     st.dataframe(df[["product_name", "product_code", "hsn", "uom", "qty", "rate", "amount"]].style.format({
-        "rate": "₹{:.2f}",
-        "amount": "₹{:.2f}"
+        "rate": "${:.2f}",
+        "amount": "${:.2f}"
     }))
